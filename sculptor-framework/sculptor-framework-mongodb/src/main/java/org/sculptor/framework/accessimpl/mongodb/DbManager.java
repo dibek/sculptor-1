@@ -55,6 +55,7 @@ public class DbManager implements Cloneable {
     }
 
     // lazy init
+    // lazy init
     @SuppressWarnings("deprecation")	
 	private synchronized void init() {
         if (initialized) {
@@ -64,19 +65,23 @@ public class DbManager implements Cloneable {
             throw new IllegalStateException("MongoDB dbname not defined");
         }
         try {
-            if (dbUrl1 == null || dbUrl1.equals("")) {
-                // default host/port, but with options
-                mongo = new Mongo(new ServerAddress(), options);
-            } else if (dbUrl2 != null && !dbUrl2.equals("")) {
-                DBAddress left = new DBAddress(urlWithDbname(dbUrl1));
-                DBAddress right = new DBAddress(urlWithDbname(dbUrl2));
-                mongo = new Mongo(left, right, options);
-            } else {
-                DBAddress left = new DBAddress(urlWithDbname(dbUrl1));
-                mongo = new Mongo(left, options);
-            }
-            db = mongo.getDB(dbname);
-            initialized = true;
+			String[] arrayUrl = null;
+			if (dbUrl1 != null) {
+				List addrs = new ArrayList();
+				arrayUrl = dbUrl1.split(",");
+				for (String url : arrayUrl) {
+					String[] arrayAddress = url.split(":");
+					addrs.add( new ServerAddress(arrayAddress[0] , Integer.valueOf(arrayAddress[1]) ));
+				}
+				mongo = new Mongo( addrs, options );
+				mongo.setReadPreference(ReadPreference.primaryPreferred());
+			}
+			if (dbUrl1 == null || dbUrl1.equals("")) {
+				// default host/port, but with options
+				mongo = new Mongo(new ServerAddress(), options);
+			}
+			db = mongo.getDB(dbname);
+			initialized = true;
         } catch (Exception e) {
             throw new RuntimeException(e.getMessage(), e);
         }
