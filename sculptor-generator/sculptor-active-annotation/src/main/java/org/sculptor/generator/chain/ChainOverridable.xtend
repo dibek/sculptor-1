@@ -26,7 +26,6 @@ import org.eclipse.xtend.lib.macro.RegisterGlobalsContext
 import org.eclipse.xtend.lib.macro.TransformationContext
 import org.eclipse.xtend.lib.macro.declaration.ClassDeclaration
 import org.eclipse.xtend.lib.macro.declaration.MutableClassDeclaration
-import org.eclipse.xtend.lib.macro.declaration.MutableMethodDeclaration
 import org.eclipse.xtend.lib.macro.declaration.Visibility
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
@@ -34,7 +33,7 @@ import org.slf4j.LoggerFactory
 import static extension org.sculptor.generator.chain.ChainOverrideHelper.*
 
 /**
- * Adds chain interface und delegate methods for all public methods.
+ * Adds chain interface and delegate methods for all public methods.
  */
 @Target(ElementType::TYPE)
 @Active(typeof(ChainOverridableProcessor))
@@ -43,11 +42,10 @@ public annotation ChainOverridable {}
 class ChainOverridableProcessor extends AbstractClassProcessor {
 
 	private static final Logger LOG = LoggerFactory::getLogger(typeof(ChainOverridableProcessor))
-
-	public static final String RENAMED_METHOD_NAME_PREFIX = '_chained_'
-
+	
 	override doRegisterGlobals(ClassDeclaration annotatedClass, RegisterGlobalsContext context) {
 		context.registerInterface(annotatedClass.methodIndexesName)
+		context.registerClass(annotatedClass.dispatchClassName)
 	}
 
   
@@ -55,29 +53,30 @@ class ChainOverridableProcessor extends AbstractClassProcessor {
 		
 		LOG.debug("Processing class '" + annotatedClass.qualifiedName + "'")
 		if (validate(annotatedClass, context)) {
-
-			val averrideableMethodIndexNames = annotatedClass.getOverrideableMethodIndexNames()
-			buildMethodNamesInterface(annotatedClass, context, averrideableMethodIndexNames)
-
-//			val List<String> overrideMethodIndexNames = newArrayList()
-//			overrideMethodIndexNames.addAll(overrideMethods.map[m | m.indexName])
 			
-			transformAnnotatedClass(annotatedClass, context, averrideableMethodIndexNames)
+			val overrideableMethodsInfo = annotatedClass.overrideableMethodsInfo
+			
+			buildMethodNamesInterface(annotatedClass, context, overrideableMethodsInfo)
+			
+			transformAnnotatedClass(annotatedClass, context, overrideableMethodsInfo)
+
+			buildMethodDispatchClass(annotatedClass, context, overrideableMethodsInfo)
 
 		}
 	}
 	
+	
+	/**
+	 * Build interface of constants for the method indexes
+	 */
 	 private def buildMethodNamesInterface(MutableClassDeclaration annotatedClass,
-		extension TransformationContext context, List<String> overrideMethodIndexNames) {
+		extension TransformationContext context, List<OverridableMethodInfo> overridableMethodsInfo) {
 		val methodIndexesInterface = findInterface(annotatedClass.methodIndexesName)
 		methodIndexesInterface.setDocComment(
 			'''Constants for methods in «annotatedClass.simpleName», used for dispatching for overrideable methods''')
 
-		// add the public methods to the interface
-		//		val methodsList = annotatedClass.declaredMethods.toList
-		//val overrideMethods = annotatedClass.getOverrideableMethods()
-		overrideMethodIndexNames.forEach [ methodIndexName, methodIx |
-			methodIndexesInterface.addField(methodIndexName) [
+		overridableMethodsInfo.forEach [ methodInfo, methodIx |
+			methodIndexesInterface.addField(methodInfo.methodIndexName) [
 				static = true
 				visibility = Visibility::PUBLIC
 				final = true
@@ -91,10 +90,62 @@ class ChainOverridableProcessor extends AbstractClassProcessor {
 			visibility = Visibility::PUBLIC
 			final = true
 			type = primitiveInt
-			initializer = ['''«overrideMethodIndexNames.size»''']
+			initializer = ['''«overridableMethodsInfo.size»''']
 		]
 	}
-	
+
+	/**
+	 * @return Method dispatch class, which dispatches to another objects for each method, for annotatedClass
+	 */
+	private def buildMethodDispatchClass(MutableClassDeclaration annotatedClass,
+		extension TransformationContext context, List<OverridableMethodInfo> overridableMethodsInfo) {
+			
+		val dispatchClass = findClass(annotatedClass.dispatchClassName)
+		dispatchClass.setDocComment(
+			'''Method dispatch class for «annotatedClass.simpleName», used for dispatching to overrideable methods''')
+		
+		dispatchClass.modifyAddMethodDispatchBaseClass(annotatedClass, context)
+				
+		dispatchClass.addField("methodsDispatchTable")  [
+			static = false
+			visibility = Visibility::PRIVATE
+			final = true
+			type = annotatedClass.newTypeReference().newArrayTypeReference()
+		]
+		
+		dispatchClass.addMethod("getMethodsDispatchTable") [
+			static = false
+			visibility = Visibility::PUBLIC
+			final = true
+			returnType = annotatedClass.newTypeReference().newArrayTypeReference()
+			body = [
+				'''
+					return(methodsDispatchTable);
+				'''
+			]
+		]
+		
+		overridableMethodsInfo.forEach[methodInfo |
+
+			val publicMethod = methodInfo.publicMethod
+			val methodName = methodInfo.methodName
+
+			dispatchClass.addMethod(methodName) [ dispatchMethod |
+				dispatchMethod.final = publicMethod.final
+				dispatchMethod.returnType = publicMethod.returnType
+				dispatchMethod.^default = publicMethod.^default
+				dispatchMethod.varArgs = publicMethod.varArgs
+				dispatchMethod.exceptions = publicMethod.exceptions
+				publicMethod.parameters.forEach[dispatchMethod.addParameter(simpleName, type)]
+				dispatchMethod.docComment = publicMethod.docComment
+				dispatchMethod.body = ['''
+					«annotatedClass.simpleName» nextObj = methodsDispatchTable[«annotatedClass.methodIndexesName».«methodInfo.methodIndexName»];
+					«IF !publicMethod.returnType.isVoid»return«ENDIF» nextObj.«RENAMED_METHOD_NAME_PREFIX + methodName»(«FOR p : publicMethod.parameters SEPARATOR ", "»«p.simpleName»«ENDFOR»);
+				''']
+				
+			]
+		]
+	}
 
 	private def boolean validate(MutableClassDeclaration annotatedClass, extension TransformationContext context) {
 
@@ -105,124 +156,62 @@ class ChainOverridableProcessor extends AbstractClassProcessor {
 		}
 		true
 	}
-
-//	private def addGetOverridesDispatchArrayMethod(MutableClassDeclaration annotatedClass, extension TransformationContext context,
-//		List<String> overrideMethodIndexNames
-//	) {
-//		annotatedClass.addMethod("_getOverridesDispatchArray") [
-//			visibility = Visibility::PUBLIC
-////			static = true
-//			final = true
-//			returnType = annotatedClass.newTypeReference.newArrayTypeReference
-//			body = ['''
-//				«annotatedClass.qualifiedName»[] result = new «annotatedClass.qualifiedName»[«annotatedClass.methodIndexesName».NUM_METHODS];
-//				«FOR m : overrideMethodIndexNames»
-//					result[«annotatedClass.methodIndexesName».«m»] = this; 
-//				«ENDFOR»
-//				return result;
-//			''']
-//		]
-//	}
 	
-	/**
-	 * Add new method that dispatches to the same method that is 'next' in the chain & implemented
-	 */
-	private def addNextDispatchMethod(MutableClassDeclaration annotatedClass, MutableClassDeclaration overrideableClass, MutableMethodDeclaration publicMethod) {
-		
-		// Copy these values early, because body block below gets evaluated later, after publicMethod has been renamed
-		val methodName = publicMethod.simpleName
-		val methodIndexName = publicMethod.indexName
-		
-			// Add new next method
-			annotatedClass.addMethod("next_" + methodName) [ nextMethod |
-				nextMethod.final = true
-				nextMethod.returnType = publicMethod.returnType
-				nextMethod.^default = publicMethod.^default
-				nextMethod.varArgs = publicMethod.varArgs
-				nextMethod.exceptions = publicMethod.exceptions
-				publicMethod.parameters.forEach[nextMethod.addParameter(simpleName, type)]
-				nextMethod.docComment = publicMethod.docComment
-				nextMethod.body = [
-					'''
-					
-						if (getMethodsDispatchNext() != null) {
-							«annotatedClass.simpleName» nextObj = getMethodsDispatchNext()[«overrideableClass.methodIndexesName».«methodIndexName»];
-							// If nextObj is the end of the chain, call the renamed method because it is the overrideable class,
-							// otherwise, call the regular method name
-							if(nextObj.getNext() == null) {
-								return nextObj.«RENAMED_METHOD_NAME_PREFIX + methodName»(«FOR p : publicMethod.parameters SEPARATOR ", "»«p.simpleName»«ENDFOR»);
-							} else {
-								return nextObj.«methodName»(«FOR p : publicMethod.parameters SEPARATOR ", "»«p.simpleName»«ENDFOR»);								
-							}
-							
-						} else {
-							return null;
-						}
-					'''
-				]
-				
-			]
-
-	}
-	
-	private def transformAnnotatedClass(MutableClassDeclaration annotatedClass, extension TransformationContext context,
-		List<String> overrideMethodIndexNames
-	) {
-		LOG.debug("Transforming annotated class '" + annotatedClass.qualifiedName + "'")
-
-		
-		// Extend from chain link class referencing the annotated class
+	private def modifyAddMethodDispatchBaseClass(MutableClassDeclaration classToModify, MutableClassDeclaration annotatedClass, extension TransformationContext context) {
+		// Extend from original overrideable class
 		val annotatedClassRef = annotatedClass.newTypeReference
-		annotatedClass.extendedClass = typeof(ChainLink).newTypeReference(annotatedClassRef)
+		classToModify.extendedClass = annotatedClassRef
 
 		val arrTypeReference = annotatedClass.newTypeReference.newArrayTypeReference
 
+		// add constructor taking dispatch table
+		classToModify.addConstructor [
+			addParameter('methodsDispatchTable', arrTypeReference)
+
+			body = ['''
+				super(null);
+				this.methodsDispatchTable = methodsDispatchTable; 
+			''']
+		]
+
+		// add constructor taking dispatch table and next reference
+		classToModify.addConstructor [
+			addParameter('next', annotatedClassRef)
+			addParameter('methodsDispatchTable', arrTypeReference)
+
+			body = ['''
+				super(next);
+				this.methodsDispatchTable = methodsDispatchTable; 
+			''']
+		]
+	}
+
+	private def modifyAddChainLinkBaseClass(MutableClassDeclaration classToModify, MutableClassDeclaration annotatedClass, extension TransformationContext context) {
+		// Extend from chain link class referencing the annotated class
+		val annotatedClassRef = annotatedClass.newTypeReference
+		classToModify.extendedClass = typeof(ChainLink).newTypeReference(annotatedClassRef)
+
 		// add constructor for chaining
-		annotatedClass.addConstructor [
+		classToModify.addConstructor [
 			addParameter("next", annotatedClassRef)
-			addParameter('methodsDispatchNext', arrTypeReference)
 
-			body = ['''super(next, methodsDispatchNext);''']
+			body = ['''super(next);''']
 		]
-
-		
-		// add methods delegating to the given extension class' public non-final methods  
-		annotatedClass.declaredMethods.filter [
-			visibility == Visibility::PUBLIC && !final && !static
-		].forEach [ publicMethod |
-			
-			annotatedClass.addNextDispatchMethod(annotatedClass, publicMethod)
-
-			// Copy these values early, because body block below gets evaluated later, after publicMethod has been renamed
-			val methodName = publicMethod.simpleName
-			val methodIndexName = publicMethod.indexName
-
-
-			// rename and hide public method
-			publicMethod.simpleName = RENAMED_METHOD_NAME_PREFIX + methodName
-			publicMethod.visibility = Visibility::PUBLIC
-
-			
-			// add new public delegate method
-			annotatedClass.addMethod(methodName) [ delegateMethod |
-				delegateMethod.returnType = publicMethod.returnType
-				//delegateMethod.final = true
-				delegateMethod.^default = publicMethod.^default
-				delegateMethod.varArgs = publicMethod.varArgs
-				delegateMethod.exceptions = publicMethod.exceptions
-				publicMethod.parameters.forEach[delegateMethod.addParameter(simpleName, type)]
-				delegateMethod.docComment = publicMethod.docComment
-				delegateMethod.body = [
-					'''
-						«annotatedClass.simpleName» nextObj = getMethodsDispatchHead()[«annotatedClass.methodIndexesName».«methodIndexName»];
-						return nextObj.«RENAMED_METHOD_NAME_PREFIX + methodName»(«FOR p : publicMethod.parameters SEPARATOR ", "»«p.simpleName»«ENDFOR»);
-					'''
-				]
-			]
-		]
-		
-		annotatedClass.addGetOverridesDispatchArrayMethod(annotatedClass, context, overrideMethodIndexNames)
-		
 	}
 	
+	
+	private def transformAnnotatedClass(MutableClassDeclaration annotatedClass, extension TransformationContext context,
+		List<OverridableMethodInfo> overridableMethodsInfo
+	) {
+		LOG.debug("Transforming annotated class '" + annotatedClass.qualifiedName + "'")
+
+		annotatedClass.modifyAddChainLinkBaseClass(annotatedClass, context)
+
+		// add methods delegating to the given extension class' public non-final methods
+		overridableMethodsInfo.forEach [ methodInfo |
+			annotatedClass.modifyOverrideableMethod(annotatedClass.newTypeReference.type, methodInfo, context)
+		]
+		
+		annotatedClass.addGetOverridesDispatchArrayMethod(annotatedClass, context, overridableMethodsInfo)
+	}
 }

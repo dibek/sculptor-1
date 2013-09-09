@@ -9,6 +9,15 @@
 		<requiredProperty key="standalone">
 			<defaultValue>false</defaultValue>
 		</requiredProperty>
+		<requiredProperty key="ejb">
+			<defaultValue>false</defaultValue>
+		</requiredProperty>
+		<requiredProperty key="ear">
+			<defaultValue>false</defaultValue>
+		</requiredProperty>
+		<requiredProperty key="rest">
+			<defaultValue>false</defaultValue>
+		</requiredProperty>
 	</requiredProperties>
 
 	<fileSets>

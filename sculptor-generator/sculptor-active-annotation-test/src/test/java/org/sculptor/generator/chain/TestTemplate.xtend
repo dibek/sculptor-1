@@ -1,4 +1,4 @@
-package org.sculptor.generator.template
+package org.sculptor.generator.chain
 
 import org.sculptor.generator.chain.ChainOverridable
 
@@ -17,5 +17,12 @@ class TestTemplate {
 		"code2"
 	}
 	
+	def void voidMethod() {
+		
+	}
+	
+	def int intMethod() {
+		1
+	}
 	
 }

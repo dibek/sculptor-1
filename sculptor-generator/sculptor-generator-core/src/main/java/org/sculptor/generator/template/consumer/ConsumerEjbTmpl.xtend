@@ -22,16 +22,16 @@ import org.sculptor.generator.ext.Helper
 import org.sculptor.generator.ext.Properties
 import org.sculptor.generator.util.HelperBase
 import org.sculptor.generator.util.OutputSlot
-import org.sculptor.generator.util.PropertiesBase
 import sculptormetamodel.Consumer
+import org.sculptor.generator.chain.ChainOverridable
 
+@ChainOverridable
 class ConsumerEjbTmpl {
 
 	@Inject private var ConsumerTmpl consumerTmpl
 
 	@Inject extension HelperBase helperBase
 	@Inject extension Helper helper
-	@Inject extension PropertiesBase propertiesBase
 	@Inject extension Properties properties
 
 	/* Used for pure-ejb3, i.e. without spring */
@@ -46,9 +46,9 @@ class ConsumerEjbTmpl {
 
 	/* Used for pure-ejb3, i.e. without spring */
 	def String messageBeanImplBase(Consumer it) {
-		fileOutput(javaFileName(getConsumerPackage() + "." + name + getSuffix("Impl") + "Base"), OutputSlot::TO_GEN_SRC, '''
+		fileOutput(javaFileName(getConsumerPackage(it) + "." + name + getSuffix("Impl") + "Base"), OutputSlot::TO_GEN_SRC, '''
 		«javaHeader()»
-		package «getConsumerPackage()»;
+		package «getConsumerPackage(it)»;
 
 /// Sculptor code formatter imports ///
 
@@ -113,7 +113,7 @@ class ConsumerEjbTmpl {
 
 	def String jmsConnection(Consumer it) {
 		'''
-		@javax.annotation.Resource(name = "jms/QueueFactory")
+		@javax.annotation.Resource(mappedName = "java:/jms/QueueFactory")
 		private javax.jms.ConnectionFactory connectionFactory;
 		private javax.jms.Connection connection;
 
@@ -152,7 +152,7 @@ class ConsumerEjbTmpl {
 
 	def String invalidMessageQueue(Consumer it) {
 		'''
-		@javax.annotation.Resource(name = "jms/invalidMessageQueue")
+		@javax.annotation.Resource(mappedName = "java:/jms/invalidMessageQueue")
 		private javax.jms.Queue invalidMessageQueue;
 
 		protected javax.jms.Destination getInvalidMessageQueue() {
@@ -163,9 +163,9 @@ class ConsumerEjbTmpl {
 
 	/* Used for pure-ejb3, i.e. without spring */
 	def String messageBeanImplSubclass(Consumer it) {
-		fileOutput(javaFileName(getConsumerPackage() + "." + name + getSuffix("Impl")), OutputSlot::TO_SRC, '''
+		fileOutput(javaFileName(getConsumerPackage(it) + "." + name + getSuffix("Impl")), OutputSlot::TO_SRC, '''
 		«javaHeader()»
-		package «getConsumerPackage()»;
+		package «getConsumerPackage(it)»;
 
 /// Sculptor code formatter imports ///
 

@@ -1,3 +1,20 @@
+/*
+ * Copyright 2013 The Sculptor Project Team, including the original 
+ * author or authors.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.sculptor.generator.template.rest
 
 import javax.inject.Inject
@@ -9,11 +26,15 @@ import sculptormetamodel.Application
 import sculptormetamodel.HttpMethod
 import sculptormetamodel.Resource
 import sculptormetamodel.ResourceOperation
+import org.sculptor.generator.chain.ChainOverridable
+import org.sculptor.generator.util.PropertiesBase
 
+@ChainOverridable
 class RestWebJspTmpl {
 
 	@Inject extension HelperBase helperBase
 	@Inject extension Helper helper
+	@Inject extension PropertiesBase propertiesBase
 	@Inject extension Properties properties
 
 def dispatch String jsp(Application it) {
@@ -154,7 +175,7 @@ def dispatch String jsp(Resource it) {
 			«list(listOperation, getOperation, updateFormOperation, deleteOperation, createFormOperation)»
 		«ENDIF»
 		«operations.filter[e | !(e == createFormOperation || e == updateFormOperation || e == getOperation || e == listOperation)]
-					.filter(e | e.httpMethod == HttpMethod::GET && e.returnString != null && !e.returnString.startsWith("redirect:")).map[r | emptyPage(r)]»
+					.filter(e | e.httpMethod == HttpMethod::GET && e.returnString != null && !e.returnString.startsWith("redirect:")).map[r | emptyPage(r)].join()»
 	'''
 }
 
@@ -186,7 +207,7 @@ def String createForm(ResourceOperation it, ResourceOperation postOperation) {
 	<jsp:directive.include file="/WEB-INF/jsp/header.jsp"/>
 	<div>
 	<h2>New «resource.getDomainResourceName()»</h2>
-		<form:form action="/rest«postOperation.path»" method="POST" modelAttribute="«postOperation.parameters.head.name»">
+		<form:form action="«getProperty("rest.contextRoot")»/rest«postOperation.path»" method="POST" modelAttribute="«postOperation.parameters.head.name»">
 		«val formClass = postOperation.parameters.filter(e | e.domainObjectType != null).map(e|e.domainObjectType).head»
 		«IF formClass != null»
 			«FOR att : formClass.attributes.filter(e | !e.isSystemAttribute())»
@@ -216,7 +237,7 @@ def String updateForm(ResourceOperation it, ResourceOperation putOperation) {
 	<h2>Edit «resource.getDomainResourceName()»</h2>
 	«val formClass = putOperation.parameters.filter(e | e.domainObjectType != null).map(e|e.domainObjectType).head»
 	«IF formClass != null»
-		<form:form action="/rest«putOperation.path.replacePlaceholder('{id}', '${' + putOperation.parameters.head.name + '}' ) »" method="PUT" modelAttribute="«putOperation.parameters.head.name»">
+		<form:form action="«getProperty("rest.contextRoot")»/rest«putOperation.path.replacePlaceholder('{id}', '${' + putOperation.parameters.head.name + '}' ) »" method="PUT" modelAttribute="«putOperation.parameters.head.name»">
 			«FOR att : formClass.attributes»
 				«IF att.isAuditableAttribute() »
 				«ELSEIF !att.isChangeable() || att.isSystemAttribute()»
@@ -323,7 +344,7 @@ def String list(ResourceOperation it, ResourceOperation getOperation, ResourceOp
 					«ENDIF»
 					«IF deleteOperation != null»
 					<td>
-						<form:form action="/rest«path»/${each.id«IF isJpaProviderAppEngine()».id«ENDIF»}" method="DELETE">
+						<form:form action="«getProperty("rest.contextRoot")»/rest«path»/${each.id«IF isJpaProviderAppEngine()».id«ENDIF»}" method="DELETE">
 							<input id="delete" type="submit" value="Delete"/>
 						</form:form>
 					</td>

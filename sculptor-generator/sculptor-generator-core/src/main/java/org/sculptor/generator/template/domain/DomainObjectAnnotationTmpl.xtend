@@ -28,7 +28,9 @@ import sculptormetamodel.DomainObject
 import sculptormetamodel.NamedElement
 import sculptormetamodel.Reference
 import sculptormetamodel.Trait
+import org.sculptor.generator.chain.ChainOverridable
 
+@ChainOverridable
 class DomainObjectAnnotationTmpl {
 
 	@Inject extension DbHelperBase dbHelperBase
@@ -73,7 +75,7 @@ def String domainObjectAnnotations(DomainObject it) {
 		«IF it.hasOwnDatabaseRepresentation()»
 			@javax.persistence.Entity
 			«IF !isInheritanceTypeSingleTable(it.getRootExtends()) || it == it.getRootExtends()»
-				@javax.persistence.Table(name = "«it.getDatabaseName()»"« IF it.hasClassLevelUniqueConstraints() »«uniqueConstraints(it)»«ENDIF»)
+				@javax.persistence.Table(name = "«it.getDatabaseName()»"«IF it.hasClassLevelUniqueConstraints() »«uniqueConstraints(it)»«ENDIF»)
 			«ENDIF»
 			«domainObjectInheritanceAnnotations(it)»
 			«IF isJpa2() && cache»

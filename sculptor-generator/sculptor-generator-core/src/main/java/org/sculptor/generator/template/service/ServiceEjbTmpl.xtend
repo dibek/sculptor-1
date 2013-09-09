@@ -28,7 +28,9 @@ import org.sculptor.generator.util.PropertiesBase
 import sculptormetamodel.Parameter
 import sculptormetamodel.Service
 import sculptormetamodel.ServiceOperation
+import org.sculptor.generator.chain.ChainOverridable
 
+@ChainOverridable
 class ServiceEjbTmpl {
 
 	@Inject private var ExceptionTmpl exceptionTmpl
@@ -97,7 +99,7 @@ def String ejbBeanImplBase(Service it) {
 		«serviceTmpl.delegateRepositories(it) »
 		«serviceTmpl.delegateServices(it) »
 
-		«it.operations.filter[op | !op.isImplementedInGapClass()].map[serviceTmpl.implMethod(it)]»
+		«it.operations.filter[op | !op.isImplementedInGapClass()].map[serviceTmpl.implMethod(it)].join()»
 	}
 	'''
 	)
@@ -127,7 +129,7 @@ def String ejbBeanImplSubclass(Service it) {
 
 	«serviceTmpl.otherDependencies(it)»
 
-		«it.operations.filter(op | op.isImplementedInGapClass()) .map[serviceTmpl.implMethod(it)]»
+		«it.operations.filter(op | op.isImplementedInGapClass()) .map[serviceTmpl.implMethod(it)].join()»
 
 	«serviceTmpl.serviceHook(it)»
 	}
@@ -275,12 +277,12 @@ def String serviceProxy(Service it) {
 			}
 		}
 
-	private String earName() {
-		if (earName == null) {
-			earName = defaultEarName();
+		private String earName() {
+			if (earName == null) {
+				earName = defaultEarName();
+			}
+			return earName;
 		}
-		return earName;
-	}
 
 		private String defaultEarName() {
 			«IF hasProperty("deployment.earname")»
@@ -348,7 +350,7 @@ def String serviceRemoteProxy(Service it) {
 
 		/**
 		 * InitialContext javax.naming.Context.PROVIDER_URL, for example
-		 * jnp://host1:1099,host2:1099
+		 * remote://host1:4447,host2:4447
 		 */
 		public void setProviderUrl(String providerUrl) {
 			this.providerUrl = providerUrl;
@@ -387,9 +389,8 @@ def String serviceRemoteProxy(Service it) {
 			java.util.Properties p = new java.util.Properties();
 
 			«IF applicationServer() == "jboss"»
-				// doc of properties: http://community.jboss.org/wiki/NamingContextFactory
-				p.put(javax.naming.Context.INITIAL_CONTEXT_FACTORY, "org.jnp.interfaces.NamingContextFactory");
-				p.put(javax.naming.Context.URL_PKG_PREFIXES, "jboss.naming:org.jnp.interfaces");
+				// doc of properties: https://docs.jboss.org/author/display/AS72/JNDI+Reference
+				p.put(javax.naming.Context.INITIAL_CONTEXT_FACTORY, "org.jboss.naming.remote.client.InitialContextFactory");
 				if (providerUrl != null) {
 					p.put(javax.naming.Context.PROVIDER_URL, sortProviderUrl());
 				}
@@ -407,7 +408,7 @@ def String serviceRemoteProxy(Service it) {
 		}
 
 		«IF applicationServer() == "jboss"»
-			private static final String JNP = "jnp://";
+			private static final String REMOTE = "remote://";
 			private java.util.Random random = new java.util.Random(0);
 
 			/**
@@ -420,8 +421,8 @@ def String serviceRemoteProxy(Service it) {
 					throw new IllegalArgumentException("providerUrl must be defined");
 				}
 				String str;
-				if (providerUrl.startsWith(JNP)) {
-					str = providerUrl.substring(JNP.length());
+				if (providerUrl.startsWith(REMOTE)) {
+					str = providerUrl.substring(REMOTE.length());
 				} else {
 					str = providerUrl;
 				}
@@ -440,8 +441,8 @@ def String serviceRemoteProxy(Service it) {
 					}
 				}
 				StringBuilder result = new StringBuilder();
-				if (providerUrl.startsWith(JNP)) {
-					result.append(JNP);
+				if (providerUrl.startsWith(REMOTE)) {
+					result.append(REMOTE);
 				}
 				if (primary != null) {
 					result.append(primary);
@@ -484,7 +485,7 @@ def String webServiceAnnotations(Service it) {
 		serviceName = "«name»")
 	«IF applicationServer() == "jboss" »
 		// http://localhost:8080/«module.application.name.toLowerCase()»/«name»/WebDelegateEndPoint?wsdl
-		@org.jboss.wsf.spi.annotation.WebContext(contextRoot = "/«module.application.name.toLowerCase()»", urlPattern="/«name»/WebDelegateEndPoint")
+		@org.jboss.ws.api.annotation.WebContext(contextRoot = "/«module.application.name.toLowerCase()»", urlPattern="/«name»/WebDelegateEndPoint")
 	«ENDIF»
 	'''
 }
@@ -528,13 +529,13 @@ def String webServiceParamTypeAndName(Parameter it) {
 }
 
 def String webServicePackageInfo(Service it) {
-	fileOutput(javaFileName(it.getServiceapiPackage() + ".package-info"), OutputSlot::TO_SRC, '''
-	// TODO: beautifier has problem with this file, therefore it is placed in TO_SRC
-	//	to get elementFormDefault='qualified' for schema generated from this package
+	fileOutput(javaFileName(it.getServiceapiPackage() + ".package-info"), OutputSlot::TO_GEN_SRC, '''
 	@javax.xml.bind.annotation.XmlSchema(
 		namespace = "http://«FOR e : reversePackageName(it.getServiceapiPackage()) SEPARATOR '.'»«e»«ENDFOR»/",
 		elementFormDefault = javax.xml.bind.annotation.XmlNsForm.QUALIFIED)
 	package «it.getServiceapiPackage()»;
+
+/// Sculptor code formatter imports ///
 
 	'''
 	)

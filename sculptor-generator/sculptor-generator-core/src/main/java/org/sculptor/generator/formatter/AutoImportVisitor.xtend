@@ -20,16 +20,19 @@ import java.util.HashSet
 import java.util.Set
 import org.eclipse.jdt.internal.compiler.ASTVisitor
 import org.eclipse.jdt.internal.compiler.ast.CompilationUnitDeclaration
+import org.eclipse.jdt.internal.compiler.ast.ImportReference
 import org.eclipse.jdt.internal.compiler.ast.ParameterizedQualifiedTypeReference
 import org.eclipse.jdt.internal.compiler.ast.QualifiedNameReference
 import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference
 import org.eclipse.jdt.internal.compiler.lookup.BlockScope
 import org.eclipse.jdt.internal.compiler.lookup.ClassScope
+import org.eclipse.jdt.internal.compiler.lookup.CompilationUnitScope
 import org.eclipse.text.edits.InsertEdit
 import org.eclipse.text.edits.MultiTextEdit
 import org.eclipse.text.edits.TextEdit
 
 import static extension org.sculptor.generator.formatter.ASTNodeHelper.*
+import org.eclipse.jdt.internal.compiler.ast.TypeDeclaration
 
 /**
  * This {@link ASTVisitor} provides {@link TextEdit} instances to replace all
@@ -49,8 +52,8 @@ class AutoImportVisitor extends ASTVisitor {
 		this.compilationUnit = compilationUnit
 		if (compilationUnit.imports != null) {
 			compilationUnit.imports.forEach [ importRef |
-				imports += importRef.qualifiedName
-				importShortNames += importRef.shortName
+				imports += importRef.qualifiedTypeName
+				importShortNames += importRef.shortTypeName
 			]
 
 		}
@@ -65,6 +68,11 @@ class AutoImportVisitor extends ASTVisitor {
 		val textEdit = new MultiTextEdit
 		additionalImports.sort.forEach[importName|textEdit.addChild(new InsertEdit(pos, 'import ' + importName + ';\n'))]
 		textEdit
+	}
+
+	override visit(TypeDeclaration type, CompilationUnitScope scope) {
+		importShortNames += String.valueOf(type.name)
+		return true
 	}
 
 	override visit(QualifiedTypeReference typeReference, BlockScope scope) {
@@ -97,13 +105,18 @@ class AutoImportVisitor extends ASTVisitor {
 		return false
 	}
 
+	override boolean visit(ImportReference reference, CompilationUnitScope scope) {
+		autoImport(reference)
+		return true;
+	}
+
 	private def autoImport(QualifiedTypeReference reference) {
 
 		// Check if import already defined 
-		if (imports.contains(reference.qualifiedName)) {
+		if (imports.contains(reference.qualifiedTypeName)) {
 			textEdit.addChild(reference.renameTextEdit)
 		} else // Check if this types short name collides with an already used short name
-		if (!importShortNames.contains(reference.shortName)) {
+		if (!importShortNames.contains(reference.shortTypeName)) {
 			textEdit.addChild(reference.renameTextEdit)
 			addImport(reference)
 		}
@@ -123,33 +136,40 @@ class AutoImportVisitor extends ASTVisitor {
 	}
 
 	private def addImport(QualifiedTypeReference reference) {
-		additionalImports += reference.qualifiedName
-		imports += reference.qualifiedName
-		importShortNames += reference.shortName
+		additionalImports += reference.qualifiedTypeName
+		imports += reference.qualifiedTypeName
+		importShortNames += reference.shortTypeName
 	}
 
 	private def autoImport(QualifiedNameReference reference) {
-		if (reference.isType || reference.variable) {
+		if (reference.isType || reference.fullyQualified) {
+			val shortTypeName = reference.shortTypeName
+	
 			// Check if import already defined
-
-			// reference.shortName for constants is in form 'CascadeType.DELETE_ORPHAN' we have to cut only class name
-			val dotPos = reference.shortName.indexOf('.')
-			val shortName = if (dotPos == -1) reference.shortName else reference.shortName.substring(0, dotPos)
-
-			if (imports.contains(reference.qualifiedName)) {
+			if (imports.contains(reference.qualifiedTypeName)) {
 				textEdit.addChild(reference.renameTextEdit)
 			} else // Check if this types short name collides with an already used short name
-			if (!importShortNames.contains(shortName)) {
+			if (!importShortNames.contains(shortTypeName)) {
 				textEdit.addChild(reference.renameTextEdit)
-				addImport(reference, shortName)
+				addImport(reference, shortTypeName)
 			}
 		}
 	}
 
-	private def addImport(QualifiedNameReference reference, String shortName) {
-		additionalImports += reference.qualifiedName
-		imports += reference.qualifiedName
-		importShortNames += shortName
+	private def addImport(QualifiedNameReference reference, String shortTypeName) {
+		additionalImports += reference.qualifiedTypeName
+		imports += reference.qualifiedTypeName
+		importShortNames += shortTypeName
+	}
+
+	private def autoImport(ImportReference reference) {
+		if (reference.annotations != null) {
+			reference.annotations.forEach [ referenceAnnotation |
+				if (referenceAnnotation.type instanceof QualifiedTypeReference) {
+					autoImport(referenceAnnotation.type as QualifiedTypeReference)
+				}
+			]
+		}
 	}
 
 }

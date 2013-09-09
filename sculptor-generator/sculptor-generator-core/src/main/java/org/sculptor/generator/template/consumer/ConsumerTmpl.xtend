@@ -25,7 +25,9 @@ import org.sculptor.generator.util.HelperBase
 import org.sculptor.generator.util.OutputSlot
 import org.sculptor.generator.util.PropertiesBase
 import sculptormetamodel.Consumer
+import org.sculptor.generator.chain.ChainOverridable
 
+@ChainOverridable
 class ConsumerTmpl {
 
 	@Inject private var PubSubTmpl pubSubTmpl
@@ -50,26 +52,33 @@ def String consumer(Consumer it) {
 	«ENDIF»
 
 	«IF isTestToBeGenerated()»
-		«IF pureEjb3()»
-			«consumerEjbTestTmpl.consumerJUnitOpenEjb(it)»
-		«ELSEIF applicationServer() == "appengine"»
-			«/* TODO */»
-		«ELSEIF mongoDb()»
-			«/* TODO */»
-		«ELSE»
-			«consumerTestTmpl.consumerJUnitWithAnnotations(it)»
-		«ENDIF»
+		«consumerTest(it)»
 		«IF isDbUnitTestDataToBeGenerated()»
-			«consumerTestTmpl.dbunitTestData(it)»
+			«consumerTestDbUnitData(it)»
 		«ENDIF»
 	«ENDIF»
+	
 	'''
 }
 
+def void consumerTest(Consumer it) {
+	if(pureEjb3) {
+		consumerEjbTestTmpl.consumerJUnitOpenEjb(it)
+	} else if(applicationServer() == "appengine") {
+		/* TODO */
+	} else {
+		consumerTestTmpl.consumerJUnitWithAnnotations(it)
+	}
+}
+
+def void consumerTestDbUnitData(Consumer it) {
+	consumerTestTmpl.dbunitTestData(it)
+}
+
 def String consumerInterface(Consumer it) {
-	fileOutput(javaFileName(getConsumerPackage() + "." + name), OutputSlot::TO_GEN_SRC, '''
+	fileOutput(javaFileName(it.getConsumerPackage() + "." + name), OutputSlot::TO_GEN_SRC, '''
 	«javaHeader()»
-	package «getConsumerPackage()»;
+	package «it.getConsumerPackage()»;
 
 /// Sculptor code formatter imports ///
 
@@ -82,9 +91,9 @@ def String consumerInterface(Consumer it) {
 
 
 def String eventConsumerImplBase(Consumer it) {
-	fileOutput(javaFileName(getConsumerPackage() + "." + name + "ImplBase"), OutputSlot::TO_GEN_SRC, '''
+	fileOutput(javaFileName(it.getConsumerPackage() + "." + name + "ImplBase"), OutputSlot::TO_GEN_SRC, '''
 	«javaHeader()»
-	package «getConsumerPackage()»;
+	package «it.getConsumerPackage()»;
 
 /// Sculptor code formatter imports ///
 
@@ -123,9 +132,9 @@ def String eventConsumerImplBase(Consumer it) {
 
 
 def String eventConsumerImplSubclass(Consumer it) {
-	fileOutput(javaFileName(getConsumerPackage() + "." + name + "Impl"), OutputSlot::TO_SRC, '''
+	fileOutput(javaFileName(it.getConsumerPackage() + "." + name + "Impl"), OutputSlot::TO_SRC, '''
 	«javaHeader()»
-	package «getConsumerPackage()»;
+	package «it.getConsumerPackage()»;
 
 /// Sculptor code formatter imports ///
 

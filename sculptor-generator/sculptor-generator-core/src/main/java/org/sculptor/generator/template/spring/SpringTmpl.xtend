@@ -1,13 +1,13 @@
 /*
- * Copyright 2007 The Fornax Project Team, including the original
+ * Copyright 2013 The Sculptor Project Team, including the original 
  * author or authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *      http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,6 +21,7 @@ import javax.inject.Inject
 import org.sculptor.generator.ext.Helper
 import org.sculptor.generator.ext.Properties
 import org.sculptor.generator.template.camel.CamelTmpl
+import org.sculptor.generator.template.common.EhCacheTmpl
 import org.sculptor.generator.template.drools.DroolsTmpl
 import org.sculptor.generator.template.springint.SpringIntegrationTmpl
 import org.sculptor.generator.util.HelperBase
@@ -28,14 +29,18 @@ import org.sculptor.generator.util.OutputSlot
 import org.sculptor.generator.util.PropertiesBase
 import sculptormetamodel.Application
 import sculptormetamodel.CommandEvent
+import sculptormetamodel.Enum
 import sculptormetamodel.Module
 import sculptormetamodel.Service
+import org.sculptor.generator.chain.ChainOverridable
 
+@ChainOverridable
 class SpringTmpl {
 
 	@Inject private var CamelTmpl camelTmpl
 	@Inject private var DroolsTmpl droolsTmpl
 	@Inject private var SpringIntegrationTmpl springIntegrationTmpl
+	@Inject private var EhCacheTmpl ehcacheTmpl
 
 	@Inject extension HelperBase helperBase
 	@Inject extension Helper helper
@@ -74,9 +79,9 @@ def String spring(Application it) {
 	«ENDIF»
 
 	«IF cacheProvider() == "EhCache"»
-		«ehcacheProperties(it)»
+		«ehcacheTmpl.ehcacheXml(it)»
 	«ENDIF»
-	
+
 	«IF mongoDb()»
 		«mongodb(it)»
 	«ENDIF»
@@ -84,26 +89,26 @@ def String spring(Application it) {
 	«IF isTestToBeGenerated()»
 		«applicationContextTest(it)»
 		«springPropertiesTest(it)»
-	«moreTest(it)»
-	«interceptorTest(it)»
-	«IF jpa()»
-		«IF !isJpaProviderAppEngine()»
-			«entityManagerFactoryTest(it)»
+		«moreTest(it)»
+		«interceptorTest(it)»
+		«IF jpa()»
+			«IF !isJpaProviderAppEngine()»
+				«entityManagerFactoryTest(it)»
+			«ENDIF»
+			«IF !isJpaProviderAppEngine() || (cacheProvider() == "EhCache")»
+				«ehcacheTmpl.ehcacheTestXml(it)»
+			«ENDIF»
 		«ENDIF»
-		«IF !isJpaProviderAppEngine() || (cacheProvider() == "EhCache")»
-			«testEhcacheProperties(it)»
+		«IF isPubSubToBeGenerated()»
+			«IF getProperty("integration.product") == "camel"»
+				«camelTmpl.camelTestConfig(it)»
+			«ELSEIF getProperty("integration.product") == "spring-integration"»
+				«springIntegrationTmpl.springIntegrationTestConfig(it)»
+			«ENDIF»
 		«ENDIF»
-	«ENDIF»
-	«IF isPubSubToBeGenerated()»
-		«IF getProperty("integration.product") == "camel"»
-			«camelTmpl.camelTestConfig(it)»
-		«ELSEIF getProperty("integration.product") == "spring-integration"»
-			«springIntegrationTmpl.springIntegrationTestConfig(it)»
+		«IF mongoDb()»
+			«mongodbTest(it)»
 		«ENDIF»
-	«ENDIF»
-	«IF mongoDb()»
-		«mongodbTest(it)»
-	«ENDIF»
 	«ENDIF»
 	'''
 }
@@ -165,7 +170,7 @@ def String applicationContext(Application it) {
 		<import resource="classpath:/«it.getResourceDir("spring") + it.getApplicationContextFile("more.xml")»"/>
 		«IF it.hasConsumers() && isEar() »
 			<import resource="classpath:/«it.getResourceDir("spring") + it.getApplicationContextFile("Jms.xml")»"/>
-		«ENDIF »
+		«ENDIF»
 		«IF mongoDb()»
 			<import resource="classpath:/«it.getResourceDir("spring") + it.getApplicationContextFile("mongodb.xml")»"/>
 		«ENDIF»
@@ -238,7 +243,7 @@ def String springPropertyConfigTest(Application it) {
 def String springProperties(Application it) {
 	fileOutput(it.getResourceDir("spring") + "spring.properties", OutputSlot::TO_RESOURCES, '''
 	«IF applicationServer() == "jboss"»
-	jndi.port=1099
+		jndi.port=4447
 	«ENDIF»
 	'''
 	)
@@ -255,63 +260,62 @@ def String generatedSpringProperties(Application it) {
 	fileOutput(it.getResourceDir("spring") + "generated-spring.properties", OutputSlot::TO_GEN_RESOURCES, '''
 	# Default configuration properties, possible to override in spring.properties
 	«IF applicationServer() == "jboss"»
-	jndi.port=1099
+		jndi.port=4447
 	«ENDIF»
 	«IF getSpringRemotingType() == "rmi" »
-	rmiRegistry.port=1199
+		rmiRegistry.port=1199
 	«ENDIF»
 	«IF mongoDb()»
-	mongodb.dbname=«name»
-	mongodb.url1=localhost:27017
-	mongodb.url2=
-	mongodbOptions.connectionsPerHost=10
-	mongodbOptions.threadsAllowedToBlockForConnectionMultiplier=5
-	mongodbOptions.connectTimeout=0
-	mongodbOptions.socketTimeout=0
-	mongodbOptions.autoConnectRetry=false
+		mongodb.dbname=«name»
+		mongodb.url1=localhost:27017
+		mongodb.url2=
+		mongodbOptions.connectionsPerHost=10
+		mongodbOptions.threadsAllowedToBlockForConnectionMultiplier=5
+		mongodbOptions.connectTimeout=0
+		mongodbOptions.socketTimeout=0
+		mongodbOptions.autoConnectRetry=false
 	«ENDIF»
 	«IF isSpringDataSourceSupportToBeGenerated()»
-	# datasource provider
-	jdbc.dataSourceClassName=org.apache.commons.dbcp.BasicDataSource
-	«IF dbProduct == "mysql"»
-	# datasource properties for MySQL
-	jdbc.driverClassName=com.mysql.jdbc.Driver
-	jdbc.url=jdbc:mysql://localhost/«name.toFirstLower()»
-	jdbc.username=«name.toFirstLower()»
-	«ELSEIF dbProduct == "oracle"»
-	# datasource properties for Oracle
-	jdbc.driverClassName=oracle.jdbc.OracleDriver
-	jdbc.url=jdbc:oracle:thin:@localhost:1521:XE
-	jdbc.username=«name.toFirstLower()»
-	«ELSEIF dbProduct == "hsqldb-inmemory"»
-	# datasource properties for HSQLDB
-	jdbc.driverClassName=org.hsqldb.jdbcDriver
-	jdbc.url=jdbc:hsqldb:mem:«name.toFirstLower()»
-	jdbc.username=sa
-	«ELSEIF dbProduct == "postgresql"»
-	# datasource properties for PostgreSQL
-	jdbc.driverClassName=org.postgresql.Driver
-	jdbc.url=jdbc:postgresql://localhost/«name.toFirstLower()»
-	jdbc.username=«name.toFirstLower()»
-	«ELSE»
-	jdbc.driverClassName=
-	jdbc.url=
-	jdbc.username=
-	«ENDIF»
-	jdbc.password=
+		# datasource provider
+		jdbc.dataSourceClassName=org.apache.commons.dbcp.BasicDataSource
+		«IF dbProduct == "mysql"»
+			# datasource properties for MySQL
+			jdbc.driverClassName=com.mysql.jdbc.Driver
+			jdbc.url=jdbc:mysql://localhost/«name.toFirstLower()»
+			jdbc.username=«name.toFirstLower()»
+		«ELSEIF dbProduct == "oracle"»
+			# datasource properties for Oracle
+			jdbc.driverClassName=oracle.jdbc.OracleDriver
+			jdbc.url=jdbc:oracle:thin:@localhost:1521:XE
+			jdbc.username=«name.toFirstLower()»
+		«ELSEIF dbProduct == "hsqldb-inmemory"»
+			# datasource properties for HSQLDB
+			jdbc.driverClassName=org.hsqldb.jdbcDriver
+			jdbc.url=jdbc:hsqldb:mem:«name.toFirstLower()»
+			jdbc.username=sa
+		«ELSEIF dbProduct == "postgresql"»
+			# datasource properties for PostgreSQL
+			jdbc.driverClassName=org.postgresql.Driver
+			jdbc.url=jdbc:postgresql://localhost/«name.toFirstLower()»
+			jdbc.username=«name.toFirstLower()»
+		«ELSE»
+			jdbc.driverClassName=
+			jdbc.url=
+			jdbc.username=
+		«ENDIF»
+		jdbc.password=
 	«ENDIF»
 	«IF isInjectDrools()»
-	# Drools properties
-	drools.rule-source=/CompanyPolicy.xml
-	drools.rule-refresh=300
-	drools.catch-all-exceptions=false
+		# Drools properties
+		drools.rule-source=/CompanyPolicy.xml
+		drools.rule-refresh=300
+		drools.catch-all-exceptions=false
 	«ENDIF»
 	«IF it.hasConsumers() && isEar() »
-	connectionFactory.jndiName=ConnectionFactory
-	invalidMessageDestination.jndiName=queue/«name.toLowerCase()».invalidMessageQueue
-	java.naming.factory.initial=org.jnp.interfaces.NamingContextFactory
-	java.naming.provider.url=localhost
-	java.naming.factory.url.pkgs=org.jnp.interfaces:org.jboss.naming
+		connectionFactory.jndiName=jms/ConnectionFactory
+		invalidMessageDestination.jndiName=queue/«name.toLowerCase()».invalidMessageQueue
+		java.naming.factory.initial=org.jboss.naming.remote.client.InitialContextFactory
+		java.naming.provider.url=remote://localhost:4447
 	«ENDIF»
 	'''
 	)
@@ -393,11 +397,11 @@ def String beanRefContext(Application it) {
 
 def String interceptor(Application it) {
 	fileOutput(it.getResourceDir("spring") + it.getApplicationContextFile("Interceptor.xml"), OutputSlot::TO_GEN_RESOURCES, '''
-	«IF isWar() »
+	«IF isWar()»
 		«headerWithMoreNamespaces(it)»
 	«ELSE »
 		«headerWithMoreNamespaces(it)»
-	«ENDIF »
+	«ENDIF»
 
 		«aspectjAutoproxy(it)»
 	
@@ -417,22 +421,22 @@ def String interceptor(Application it) {
 		«ENDIF»
 		«IF isServiceContextToBeGenerated()»
 			<bean id="serviceContextStoreAdvice" class="«serviceContextStoreAdviceClass()»" />
-		«ENDIF »
+		«ENDIF»
 		«IF mongoDb()»
 			<bean id="mongodbManagerAdvice" class="«fw("accessimpl.mongodb.DbManagerAdvice")»" >
 				<property name="dbManager" ref="mongodbManager" />
 			</bean>
-		«ENDIF »
+		«ENDIF»
 		«IF isInjectDrools()»
 			<bean id="droolsAdvice" class="«fw('drools.DroolsAdvice')»">
 				<property name="droolsRuleSet" value="${drools.rule-source}"/>
 				<property name="updateInterval" value="${drools.rule-refresh}"/>
 				<property name="catchAllExceptions" value="${drools.catch-all-exceptions}"/>
 			</bean>
-		«ENDIF »
+		«ENDIF»
 	
-		«IF jpa() && (isWar() || !isSpringAnnotationTxToBeGenerated())»
-			«txAdvice(it)»
+		«IF isSpringTxAdviceToBeGenerated()»
+			«txAdvice(it, false)»
 		«ENDIF»
 	
 		«aopConfig(it) »
@@ -458,14 +462,14 @@ def String jpaInterceptor(Application it) {
 	'''
 }
 
-def String txAdvice(Application it) {
+def String txAdvice(Application it, boolean isInComment) {
 	'''
 	<tx:advice id="txAdvice" transaction-manager="txManager">
 		<tx:attributes>
-			<!-- all methods starting with 'get' or 'find' are read-only -->
+			<!-«IF !isInComment»-«ENDIF» all methods starting with 'get' or 'find' are read-only «IF !isInComment»-«ENDIF»->
 			<tx:method name="get*" read-only="true"/>
 			<tx:method name="find*" read-only="true"/>
-			<!-- all other methods are transactional and ApplicationException will cause rollback -->
+			<!-«IF !isInComment»-«ENDIF» all other methods are transactional and ApplicationException will cause rollback «IF !isInComment»-«ENDIF»->
 			<tx:method name="*" read-only="false" rollback-for="«applicationExceptionClass()»"/>
 		</tx:attributes>
 	</tx:advice>
@@ -486,14 +490,14 @@ def String aopConfig(Application it) {
 		«IF it.hasConsumers()»
 			<aop:pointcut id="messageConsumer"
 				expression="execution(public * «basePackage»..«subPackage("consumer")».*.*(..))"/>
-		«ENDIF »
+		«ENDIF»
 
-		«IF jpa() && (isWar() || !isSpringAnnotationTxToBeGenerated())»
+		«IF isSpringTxAdviceToBeGenerated()»
 			<aop:advisor pointcut-ref="businessService" advice-ref="txAdvice" order="1" />
-		«ENDIF »
+		«ENDIF»
 		«IF isServiceContextToBeGenerated()»
 			<aop:advisor pointcut-ref="businessService" advice-ref="serviceContextStoreAdvice" order="2" />
-		«ENDIF »
+		«ENDIF»
 		<aop:advisor pointcut-ref="businessService" advice-ref="errorHandlingAdvice" order="3" />
 		«IF isJpaProviderHibernate()»
 			<aop:advisor pointcut-ref="businessService" advice-ref="hibernateErrorHandlingAdvice" order="4" />
@@ -512,12 +516,12 @@ def String aopConfig(Application it) {
 		«ENDIF»
 
 		«IF it.hasConsumers()»
-			«IF jpa() && (isWar() || !isSpringAnnotationTxToBeGenerated())»
+			«IF isSpringTxAdviceToBeGenerated()»
 				<aop:advisor pointcut-ref="messageConsumer" advice-ref="txAdvice" order="1" />
-			«ENDIF »
+			«ENDIF»
 			«IF isServiceContextToBeGenerated()»
 				<aop:advisor pointcut-ref="messageConsumer" advice-ref="serviceContextStoreAdvice" order="2" />
-			«ENDIF »
+			«ENDIF»
 			<aop:advisor pointcut-ref="messageConsumer" advice-ref="errorHandlingAdvice" order="3" />
 			«IF isJpaProviderHibernate()»
 				<aop:advisor pointcut-ref="messageConsumer" advice-ref="hibernateErrorHandlingAdvice" order="4" />
@@ -527,7 +531,7 @@ def String aopConfig(Application it) {
 			«IF mongoDb()»
 				<aop:advisor pointcut-ref="messageConsumer" advice-ref="mongodbManagerAdvice" order="5" />
 			«ENDIF»
-		«ENDIF »
+		«ENDIF»
 	</aop:config>
 	'''
 }
@@ -546,10 +550,10 @@ def String interceptorTest(Application it) {
 
 def String aopConfigTest(Application it) {
 	'''
-	«IF !isWar() »
+	«IF !isWar()»
 		<!-- When isWar txAdvice is already included in included Interceptor.xml, but otherwise we need it for testing -->
 		<!-- TODO remove
-		«txAdvice(it) »
+		«txAdvice(it, true) »
 		-->
 	«ENDIF»
 
@@ -584,7 +588,7 @@ def String sessionFactory(Application it) {
 	«header(it)»
 		«IF isWar() »
 			«txManager(it)»
-		«ENDIF »
+		«ENDIF»
 
 		«IF isSpringDataSourceSupportToBeGenerated()»
 			«dataSource(it)»
@@ -640,7 +644,7 @@ def String sessionFactoryInMemory(Application it, boolean test) {
 
 		«IF isWar() »
 			«txManager(it)»
-		«ENDIF »
+		«ENDIF»
 
 		«hsqldbDataSource(it)»
 
@@ -705,7 +709,7 @@ def String dataSourceAdditions(Application it) {
 
 def String hibernateResource(Module it) {
 	'''
-	«IF !domainObjects.filter[e | e instanceof sculptormetamodel.Enum].isEmpty »
+	«IF !domainObjects.filter[e | e instanceof Enum].isEmpty »
 		«hibernateEnumTypedefResource(it)»
 	«ENDIF»
 	'''
@@ -713,7 +717,7 @@ def String hibernateResource(Module it) {
 
 def String hibernateEnumTypedefResource(Module it) {
 	'''
-	<value>«it.getResourceDir("hibernate")»«it.getEnumTypeDefFileName()»</value>
+	<value>«it.getResourceDirModule("hibernate")»«it.getEnumTypeDefFileName()»</value>
 	'''
 }
 
@@ -805,50 +809,12 @@ def String invalidMessageDestination(Application it) {
 	'''
 }
 
-
-def String ehcacheProperties(Application it) {
-	fileOutput("ehcache.xml", OutputSlot::TO_RESOURCES, '''
-	<?xml version="1.0" encoding="UTF-8"?>
-	<ehcache updateCheck="false">
-		<diskStore path="java.io.tmpdir"/>
-		<defaultCache
-			maxElementsInMemory="100000"
-			eternal="false"
-			timeToIdleSeconds="120"
-			timeToLiveSeconds="120"
-			overflowToDisk="false"
-			diskPersistent="false"
-			/>
-	</ehcache>
-	'''
-	)
-}
-
-def String testEhcacheProperties(Application it) {
-	fileOutput("ehcache.xml", OutputSlot::TO_RESOURCES_TEST, '''
-	<?xml version="1.0" encoding="UTF-8"?>
-	<ehcache updateCheck="false">
-		<diskStore path="java.io.tmpdir"/>
-		<defaultCache
-			maxElementsInMemory="10000"
-			eternal="false"
-			timeToIdleSeconds="120"
-			timeToLiveSeconds="120"
-			overflowToDisk="false"
-			diskPersistent="false"
-			/>
-	</ehcache>
-	'''
-	)
-}
-
 def String entityManagerFactory(Application it) {
 	fileOutput(it.getResourceDir("spring") + it.getApplicationContextFile("EntityManagerFactory.xml") , OutputSlot::TO_GEN_RESOURCES, '''
 	«headerWithMoreNamespaces(it)»
 
 		«IF isEar() && (!isSpringDataSourceSupportToBeGenerated() || applicationServer() == "jboss")»
 			<jee:jndi-lookup id="entityManagerFactory" jndi-name="java:/«it.persistenceUnitName()»"/>
-			«entityManagerFactoryTx(it, false)»
 		«ELSE»
 			<!-- Creates a EntityManagerFactory for use with a JPA provider -->
 			«IF isJpaProviderAppEngine()»
@@ -867,9 +833,8 @@ def String entityManagerFactory(Application it) {
 					«ENDIF»
 				</bean>
 			«ENDIF»
-			«entityManagerFactoryTx(it, false)»
 		«ENDIF»
-
+		«entityManagerFactoryTx(it, false)»
 	</beans>
 	'''
 	)

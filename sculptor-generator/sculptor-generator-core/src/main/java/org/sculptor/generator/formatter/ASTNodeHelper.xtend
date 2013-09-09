@@ -17,24 +17,22 @@
 
 package org.sculptor.generator.formatter
 
-import org.eclipse.jdt.internal.compiler.ast.ASTNode
+import org.eclipse.jdt.internal.compiler.ast.ImportReference
 import org.eclipse.jdt.internal.compiler.ast.QualifiedNameReference
 import org.eclipse.jdt.internal.compiler.ast.QualifiedTypeReference
-import org.eclipse.jdt.internal.compiler.lookup.Binding
 import org.eclipse.text.edits.DeleteEdit
-import org.eclipse.jdt.internal.compiler.ast.ImportReference
+import org.eclipse.jdt.internal.compiler.lookup.Binding
+import org.eclipse.jdt.internal.compiler.ast.ASTNode
 
 class ASTNodeHelper {
 
 	//// Qualified Type References
 
-	static def shortName(QualifiedTypeReference reference) {
-		val buf = new StringBuffer
-		buf.append(reference.tokens.last)
-		buf.toString
+	static def shortTypeName(QualifiedTypeReference reference) {
+		String.valueOf(reference.tokens.last)
 	}
 
-	static def qualifiedName(QualifiedTypeReference reference) {
+	static def qualifiedTypeName(QualifiedTypeReference reference) {
 		val buf = new StringBuffer
 		for (i : 0 ..< reference.tokens.length) {
 			if (i > 0) buf.append('.')
@@ -44,7 +42,7 @@ class ASTNodeHelper {
 	}
 
 	static def qualificationLenth(QualifiedTypeReference reference) {
-		reference.qualifiedName.length - reference.shortName.length
+		reference.qualifiedTypeName.length - reference.shortTypeName.length
 	}
 
 	static def renameTextEdit(QualifiedTypeReference reference) {
@@ -53,39 +51,43 @@ class ASTNodeHelper {
 
 	//// Qualified Name References
 
-	static def shortName(QualifiedNameReference reference) {
-		val buf = new StringBuffer
-		if (reference.isVariable) {
-			buf.append(reference.tokens.get(reference.tokens.length - 2))
-			buf.append('.')
-			buf.append(reference.tokens.last)
-		} else {
-			buf.append(reference.tokens.last)
+	static def shortTypeName(QualifiedNameReference reference) {
+		for (i : 0 ..< reference.tokens.length) {
+			val token = reference.tokens.get(i)
+			if (Character.isUpperCase(token.get(0))) {
+				return new String(token)
+			}
 		}
-		buf.toString
 	}
 
-	static def qualifiedName(QualifiedNameReference reference) {
-		val buf = new StringBuffer
-		val last = reference.tokens.length - if (reference.isVariable) 1 else 0
-		for (i : 0 ..< last) {
-			if (i > 0) buf.append('.')
-			buf.append(reference.tokens.get(i))
-		}
-		buf.toString
+	static def isFullyQualified(QualifiedNameReference reference) {
+		val typeTokens = reference.tokens.length - if (reference.isVariable) 1 else 0
+		typeTokens > 1
 	}
 
-	static def fullyQualifiedName(QualifiedNameReference reference) {
+	static def qualifiedTypeName(QualifiedNameReference reference) {
 		val buf = new StringBuffer
 		for (i : 0 ..< reference.tokens.length) {
+			val token = reference.tokens.get(i)
 			if (i > 0) buf.append('.')
-			buf.append(reference.tokens.get(i))
+			buf.append(token)
+			if (Character.isUpperCase(token.get(0))) {
+				return buf.toString
+			}
 		}
-		buf.toString
 	}
 
 	static def qualificationLenth(QualifiedNameReference reference) {
-		reference.fullyQualifiedName.length - reference.shortName.length
+		var length = 0
+		for (i : 0 ..< reference.tokens.length) {
+			val token = reference.tokens.get(i)
+			if (Character.isLowerCase(token.get(0))) {
+				length = length + token.length
+				if (i > 0) length = length + 1
+			} else {
+				return length + 1
+			}
+		}
 	}
 
 	static def isType(QualifiedNameReference reference) {
@@ -102,12 +104,12 @@ class ASTNodeHelper {
 
 	//// Import References
 
-	static def shortName(ImportReference importReference) {
-		importReference.tokens.last.toString
+	static def shortTypeName(ImportReference reference) {
+		String.valueOf(reference.tokens.last)
 	}
 
-	static def qualifiedName(ImportReference importReference) {
-		importReference.print(0, new StringBuffer(), false).toString
+	static def qualifiedTypeName(ImportReference reference) {
+		reference.print(0, new StringBuffer(), false).toString
 	}
 
 }

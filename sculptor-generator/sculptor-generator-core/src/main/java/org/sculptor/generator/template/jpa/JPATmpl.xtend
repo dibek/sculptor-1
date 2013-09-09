@@ -1,13 +1,13 @@
 /*
- * Copyright 2007 The Fornax Project Team, including the original
+ * Copyright 2013 The Sculptor Project Team, including the original 
  * author or authors.
- *
+ * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * 
  *      http://www.apache.org/licenses/LICENSE-2.0
- *
+ * 
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -26,7 +26,9 @@ import org.sculptor.generator.util.PropertiesBase
 import sculptormetamodel.Application
 import sculptormetamodel.DomainObject
 import org.sculptor.generator.util.HelperBase
+import org.sculptor.generator.chain.ChainOverridable
 
+@ChainOverridable
 class JPATmpl {
 
 	@Inject private var HibernateTmpl hibernateTmpl
@@ -109,9 +111,9 @@ def String persistenceUnitContent(Application it, String unitName) {
 		    «persistenceUnitSharedCacheMode(it)»
 		    «persistenceUnitValidationMode(it)»
 		«ENDIF»
-		<!-- properties  -->
+		<!-- properties -->
 		«persistenceUnitProperties(it, unitName)»
-		<!-- add additional configuration properties by using SpecialCases.xpt "AROUND jPATmpl.persistenceUnitAdditions FOR Application" -->
+		<!-- add additional configuration by overriding "JPATmpl.persistenceUnitAdditions(Application)" -->
 		«persistenceUnitAdditions(it, unitName)»
 	</persistence-unit>
 	'''
@@ -155,18 +157,18 @@ def String persistenceUnitDataSource(Application it, String unitName) {
 	val dataSourceName = if (it.isDefaultPersistenceUnitName(unitName)) it.dataSourceName() else it.dataSourceName(unitName)
 	'''
 	«IF isEar()»
-		«IF applicationServer() == "jboss" »
-			<jta-data-source>java:jdbc/«dataSourceName»</jta-data-source>
+		«IF applicationServer() == "jboss"»
+			<jta-data-source>java:/jdbc/«dataSourceName»</jta-data-source>
 		«ELSE»
 			«IF !isSpringDataSourceSupportToBeGenerated()»
 				<jta-data-source>java:comp/env/jdbc/«dataSourceName»</jta-data-source>
 			«ENDIF»
 		«ENDIF»
 	«ELSEIF isWar()»
-		«IF applicationServer() == "appengine" »
-		«ELSEIF applicationServer() == "jboss" »
-			<non-jta-data-source>java:jdbc/«dataSourceName»</non-jta-data-source>
-		«ELSE »
+		«IF applicationServer() == "appengine"»
+		«ELSEIF applicationServer() == "jboss"»
+			<non-jta-data-source>java:/jdbc/«dataSourceName»</non-jta-data-source>
+		«ELSE»
 			«IF !isSpringDataSourceSupportToBeGenerated()»
 				<non-jta-data-source>java:comp/env/jdbc/«dataSourceName»</non-jta-data-source>
 			«ENDIF»
@@ -217,7 +219,7 @@ def String persistenceUnitProperties(Application it, String unitName) {
 		«ELSEIF isJpaProviderOpenJpa()»
 			«persistenceUnitPropertiesOpenJpa(it)»
 		«ENDIF»
-		<!-- add additional configuration properties by using SpecialCases.xpt "AROUND jPATmpl.persistenceUnitAdditionalProperties FOR Application" -->
+		<!-- add additional configuration properties by overriding "JPATmpl.persistenceUnitAdditionalProperties(Application)" -->
 		«persistenceUnitAdditionalProperties(it, unitName)»
 	</properties>
 	'''
@@ -238,16 +240,17 @@ def String persistenceUnitPropertiesHibernate(Application it, String unitName) {
 	'''
 	<property name="hibernate.dialect" value="«propBase.hibernateDialect»" />
 	<property name="query.substitutions" value="true 1, false 0" />
-	«/* for testing purposes only */
-	»«IF propBase.dbProduct == "hsqldb-inmemory"»
+	«/* for testing purposes only */»
+	«IF propBase.dbProduct == "hsqldb-inmemory"»
 		<property name="hibernate.show_sql" value="true" />
 		<property name="hibernate.hbm2ddl.auto" value="create-drop" />
 	«ENDIF»
 	«persistenceUnitCacheProperties(it, unitName)»
 	«IF isEar()»
 		«persistenceUnitTransactionProperties(it, unitName)»
-		«IF isEar() && (!isSpringDataSourceSupportToBeGenerated() || applicationServer() == "jboss")»
-		<property name="jboss.entity.manager.factory.jndi.name" value="java:/«unitName»"/>
+		«IF !isSpringDataSourceSupportToBeGenerated() || applicationServer() == "jboss"»
+			<!-- Bind entity manager factory to JNDI -->
+			<property name="jboss.entity.manager.factory.jndi.name" value="java:/«unitName»"/>
 		«ENDIF»
 	«ENDIF»
 	'''
@@ -258,7 +261,7 @@ def String persistenceUnitPropertiesEclipseLink(Application it, String unitName)
 		<property name="eclipselink.weaving" value="static"/>
 		<property name="eclipselink.target-database" value="«getEclipseLinkTargetDatabase(unitName)»"/>
 		«IF isEar() && applicationServer() == "jboss"»
-		<property name="eclipselink.target-server" value="JBoss"/>
+			<property name="eclipselink.target-server" value="JBoss"/>
 		«ENDIF»
 		«
 		/* need this to create sequence table «IF dbProduct == "hsqldb-inmemory"» */
@@ -274,7 +277,7 @@ def String persistenceUnitPropertiesDataNucleus(Application it, String unitName)
 		<property name="datanucleus.storeManagerType" value="rdbms"/>
 		<property name="datanucleus.ConnectionFactoryName" value="java:comp/env/jdbc/«it.dataSourceName(unitName)»"/>
 		«IF propBase.dbProduct == "hsqldb-inmemory"»
-				<property name="datanucleus.autoCreateSchema" value="true"/>
+			<property name="datanucleus.autoCreateSchema" value="true"/>
 		«ENDIF»
 	'''
 }
@@ -317,7 +320,7 @@ def String persistenceUnitCachePropertiesHibernate(Application it, String unitNa
 		<property name="hibernate.cache.region_prefix" value=""/>
 		«IF cacheProvider() == "EhCache"»
 			«IF isJpaProviderHibernate3()»
-				<property name="hibernate.cache.region.factory_class" value="org.hibernate.cache.SingletonEhCacheRegionFactory"/>
+				<property name="hibernate.cache.region.factory_class" value="net.sf.ehcache.hibernate.SingletonEhCacheRegionFactory"/>
 			«ELSE»
 				<property name="hibernate.cache.region.factory_class" value="org.hibernate.cache.ehcache.SingletonEhCacheRegionFactory"/>
 			«ENDIF»
@@ -332,6 +335,11 @@ def String persistenceUnitCachePropertiesHibernate(Application it, String unitNa
 			<property name="hibernate.treecache.objectName" value="jboss.cache:service=«if (it.isDefaultPersistenceUnitName(unitName)) name else unitName»TreeCache"/>
 			<!-- use_minimal_puts in clustered environment -->
 			<property name="hibernate.cache.use_minimal_puts" value="true"/>
+		«ELSEIF cacheProvider() == "Infinispan"»
+			«IF !isEar() || applicationServer() != "jboss"»
+				<property name="hibernate.cache.region.factory_class" value="org.hibernate.cache.infinispan.JndiInfinispanRegionFactory"/>
+				<property name="hibernate.cache.infinispan.cachemanager" value="java:/CacheManager"/>
+			«ENDIF»
 		«ENDIF»
 	'''
 }
@@ -373,15 +381,18 @@ def String persistenceUnitTransactionProperties(Application it, String unitName)
 	'''
 	«IF isJpaProviderHibernate()»
 		«persistenceUnitTransactionPropertiesHibernate(it, unitName)»
+	«ELSEIF isJpaProviderEclipseLink()»
+		«persistenceUnitTransactionPropertiesEclipseLink(it, unitName)»
+	«ELSEIF isJpaProviderDataNucleus()»
+		«persistenceUnitTransactionPropertiesDataNucleus(it, unitName)»
 	«ENDIF»
 	'''
 }
 
 def String persistenceUnitTransactionPropertiesHibernate(Application it, String unitName) {
 	'''
-		<!-- «!isSpringDataSourceSupportToBeGenerated()» -->
-		«IF isEar() && (!isSpringDataSourceSupportToBeGenerated() || applicationServer() == "jboss") »
-		<property name="hibernate.transaction.manager_lookup_class" value="org.hibernate.transaction.JBossTransactionManagerLookup"/>
+		«IF isEar() && (!isSpringDataSourceSupportToBeGenerated() || applicationServer() == "jboss")»
+			<property name="hibernate.transaction.manager_lookup_class" value="org.hibernate.transaction.JBossTransactionManagerLookup"/>
 		«ENDIF»
 	'''
 }
@@ -393,11 +404,11 @@ def String persistenceUnitTransactionPropertiesEclipseLink(Application it, Strin
 
 def String persistenceUnitTransactionPropertiesDataNucleus(Application it, String unitName) {
 	'''
-		«IF isEar() && (!isSpringDataSourceSupportToBeGenerated()) »
-		<property name="datanucleus.jtaLocator" value="«applicationServer()»"/>
-		<!--
-		<property name="datanucleus.jtaJndiLocation " value="java:/TransactionManager"/>
-		-->
+		«IF isEar() && (!isSpringDataSourceSupportToBeGenerated())»
+			<property name="datanucleus.jtaLocator" value="«applicationServer()»"/>
+			<!--
+			<property name="datanucleus.jtaJndiLocation " value="java:/TransactionManager"/>
+			-->
  		«ENDIF»
 	'''
 }
@@ -431,9 +442,9 @@ def String persistenceUnitContentTest(Application it, String unitName) {
 			«persistenceUnitSharedCacheMode(it)»
 			«persistenceUnitValidationMode(it)»
 		«ENDIF»
-		<!-- propeties  -->
+		<!-- properties -->
 		«persistenceUnitPropertiesTest(it, unitName)»
-		<!-- add additional configuration properties by using SpecialCases.xpt "AROUND jPATmpl.persistenceUnitAdditions FOR Application" -->
+		<!-- add additional configuration by overriding "JPATmpl.persistenceUnitAdditions(Application)" -->
 		«persistenceUnitAdditions(it, unitName)»
 	</persistence-unit>
 	'''
@@ -451,7 +462,7 @@ def String persistenceUnitPropertiesTest(Application it, String unitName) {
 			«ELSEIF isJpaProviderOpenJpa()»
 				«persistenceUnitPropertiesTestOpenJpa(it, unitName)»
 			«ENDIF»
-			<!-- add additional configuration properties by using SpecialCases.xpt "AROUND jPATmpl.persistenceUnitAdditionalPropertiesTest FOR Application" -->
+			<!-- add additional configuration properties by overriding "JPATmpl.persistenceUnitAdditionalPropertiesTest(Application)" -->
 			«persistenceUnitAdditionalPropertiesTest(it, unitName)»
 		</properties>
 	'''

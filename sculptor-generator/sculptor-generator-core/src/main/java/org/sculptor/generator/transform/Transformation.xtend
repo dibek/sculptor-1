@@ -46,6 +46,9 @@ import sculptormetamodel.ServiceOperation
 import sculptormetamodel.Trait
 import sculptormetamodel.ValueObject
 
+/**
+ * Enriches generator meta model.
+ */
 class Transformation {
 	private static val SculptormetamodelFactory FACTORY = SculptormetamodelFactory::eINSTANCE
 
@@ -53,6 +56,7 @@ class Transformation {
 	@Inject extension HelperBase helperBase
 	@Inject extension Helper helper
 	@Inject extension Properties properties
+	@Inject extension RestTransformation restTransformation
 
 	def Application modify(Application app) {
 		initPropertiesHook()
@@ -62,7 +66,7 @@ class Transformation {
 		app.modules.map[it.getNonEnumDomainObjects].flatten.forEach[modifyUuid()]
 		// Avoid concurrent modification exception because
 		// modifyDynamicFinderOperations is inserting new operations to repository
-		val opList=app.getAllRepositories().map[operations].flatten.filter(e | !e.delegateToAccessObject && !e.isGenericAccessObject() && e.isGeneratedFinder()).toList
+		val opList = app.getAllRepositories().map[operations].flatten.filter(e | !e.delegateToAccessObject && !e.isGenericAccessObject() && e.isGeneratedFinder()).toList
 		opList.forEach[modifyDynamicFinderOperations()]
 		app.getAllRepositories().forEach[modifyPagingOperations()]
 		app.getAllRepositories().forEach[addDefaultValues()]
@@ -76,8 +80,7 @@ class Transformation {
 		app.modules.forEach[modify()]
 		app.modules.forEach[modifyModuleDatabaseNames()]
 		app.modules.forEach[modifyModuleReferencesDatabaseNames()]
-		// TODO restDefaults
-		// app.modules.map[resources].flatten.map[operations].flatten.forEach[addRestDefaults()]
+		app.modules.map[resources].flatten.map[operations].flatten.forEach[addRestDefaults()]
 		app
 	}
 

@@ -220,13 +220,10 @@ public class PropertiesBase {
 			defaultProperties.setProperty("deployment.applicationServer", "JBoss");
 		}
 
+		// for JBoss AS 7 use Infinispan cache instead of Ehcache
 		if (getProperty("deployment.applicationServer").toLowerCase().equals("jboss")) {
+			defaultProperties.setProperty("cache.provider", "Infinispan");
 			defaultProperties.setProperty("generate.datasource", "true");
-		}
-
-		// ejb.version N/A when deployment as war
-		if (getProperty("deployment.type").equals("war")) {
-			defaultProperties.setProperty("ejb.version", "N/A");
 		}
 
 		// joda-time
@@ -296,6 +293,7 @@ public class PropertiesBase {
 		}
 		defaultProperties.setProperty("generate.resource", "false");
 		defaultProperties.setProperty("generate.restWeb", "false");
+		defaultProperties.setProperty("generate.jpa.annotation", "false");
 	}
 
 	private void initDerivedDefaultsForJpa(Properties defaultProperties) {
@@ -356,12 +354,11 @@ public class PropertiesBase {
 	}
 
 	private void initDerivedDefaultsForPureEjb3(Properties defaultProperties) {
+		defaultProperties.setProperty("deployment.type", "ear");
 		defaultProperties.setProperty("generate.spring", "false");
 		defaultProperties.setProperty("generate.resource", "false");
 		defaultProperties.setProperty("generate.restWeb", "false");
-		defaultProperties.setProperty("deployment.type", "ear");
 		defaultProperties.setProperty("naming.suffix.Impl", "Bean");
-		defaultProperties.setProperty("deployment.type", "ear");
 		defaultProperties.setProperty("generate.logbackConfig", "false");
 		// TODO we probably need to do something to still be able to use
 		// spring in presentation-tier

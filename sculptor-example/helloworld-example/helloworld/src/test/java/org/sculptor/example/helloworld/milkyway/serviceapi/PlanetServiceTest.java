@@ -11,7 +11,6 @@ import org.sculptor.framework.domain.PagedResult;
 import org.sculptor.framework.domain.PagingParameter;
 import org.sculptor.framework.test.AbstractDbUnitJpaTests;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.annotation.ExpectedException;
 
 /**
  * Spring based transactional test with DbUnit support.
@@ -27,8 +26,7 @@ public class PlanetServiceTest extends AbstractDbUnitJpaTests implements PlanetS
         assertEquals("Hello from Earth", greeting);
     }
 
-    @Test
-    @ExpectedException(PlanetNotFoundException.class)
+    @Test(expected=PlanetNotFoundException.class)
     public void testSayHelloError() throws Exception {
         planetService.sayHello(getServiceContext(), "Pluto");
     }
