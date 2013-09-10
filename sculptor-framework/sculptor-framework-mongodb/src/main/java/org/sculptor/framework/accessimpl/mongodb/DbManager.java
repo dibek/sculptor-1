@@ -16,11 +16,15 @@
  */
 package org.sculptor.framework.accessimpl.mongodb;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.mongodb.DB;
 import com.mongodb.DBAddress;
 import com.mongodb.DBCollection;
 import com.mongodb.Mongo;
 import com.mongodb.MongoOptions;
+import com.mongodb.ReadPreference;
 import com.mongodb.ServerAddress;
 
 public class DbManager implements Cloneable {
@@ -67,7 +71,7 @@ public class DbManager implements Cloneable {
         try {
 			String[] arrayUrl = null;
 			if (dbUrl1 != null) {
-				List addrs = new ArrayList();
+				List addrs = new ArrayList<String>();
 				arrayUrl = dbUrl1.split(",");
 				for (String url : arrayUrl) {
 					String[] arrayAddress = url.split(":");
